@@ -1,0 +1,75 @@
+@@@@@@@@@@@@@@#######@@@@@@@@@@@@@@@
+阅读说明：
+    []      --命令可选项
+    <>      --命令必选项
+    ()      --命令说明项
+    TODO:   --提示后续添加内容
+    
+    
+-----------------------------	
+	
+/*** the reference dts config for RealTeak 5651 soundCard.
+**** particular description in <kernel/Documentation/devicetree/bindings/sound/simple-card.txt>
+**** LaMar.
+*********************/
+	
+	rt5651-sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,name = "rockchip,rt5651-codec";
+		simple-audio-card,mclk-fs = <256>;
+		simple-audio-card,widgets =
+			"Microphone", "Mic Jack",
+			"Headphone", "Headphone Jack";
+		simple-audio-card,routing =
+			"Mic Jack", "micbias1",
+			"IN1P", "Mic Jack",
+			"Headphone Jack", "HPOL",
+			"Headphone Jack", "HPOR";
+			
+		// dai-link subnodes (cpu codec) -- This container may be omitted when the card has only one DAI link
+		simple-audio-card,cpu {     
+			sound-dai = <&i2s_8ch>;   //cpu subnodes -- phandle and port of CPU/CODEC
+		};
+		simple-audio-card,codec {    
+			sound-dai = <&rt5651>;    //codec subnodes -- phandle and port of CPU/CODEC
+		};
+	};
+	
+	&i2c1 {
+	status = "okay";
+	rt5651: rt5651@1a(结点地址 reg) {
+		status = "okay";
+		#sound-dai-cells = <0>;           //it must be 0 if your system is using single DAI
+										  //it must be 1 if your system is using multi  DAI
+		compatible = "realtek,rt5651";
+		reg = <0x1a>;
+		hp-det-gpio = <&gpio0 23 GPIO_ACTIVE_LOW>;//add 
+		spk-ctl-gpio = <&gpio1 2 GPIO_ACTIVE_HIGH>;//add
+		clocks = <&cru SCLK_I2S_8CH_OUT>;
+		clock-names = "mclk";
+		pinctrl-names = "default";
+		pinctrl-0 = <&i2s_8ch_mclk>;
+	};
+
+	es8316: es8316@10 {
+		status = "disabled";
+		#sound-dai-cells = <0>;
+		compatible = "everest,es8316";
+		reg = <0x10>;
+		clocks = <&cru SCLK_I2S_8CH_OUT>;
+		clock-names = "mclk";
+		spk-con-gpio = <&gpio3 9 GPIO_ACTIVE_HIGH>;
+		hp-det-gpio = <&gpio0 23 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&i2s_8ch_mclk>;
+	};
+};
+
+	&i2s_8ch {
+		status = "okay";
+		rockchip,i2s-broken-burst-len;
+		rockchip,playback-channels = <8>;
+		rockchip,capture-channels = <2>;
+		#sound-dai-cells = <0>;
+};
