@@ -10,7 +10,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libdl \
 	libutils \
 	librjcore \
-	librjcoreservice
+	librjcoreservice\
+    	libbinder 
 
 
 LOCAL_C_INCLUDES := \

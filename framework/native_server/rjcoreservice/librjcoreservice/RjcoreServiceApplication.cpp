@@ -1,6 +1,6 @@
 
 #define LOG_TAG "RjcoreServiceApplication"
-//#define LOG_NDEBUG 0
+// #define LOG_NDEBUG 0
 
 #include <utils/Log.h>
 
@@ -13,7 +13,7 @@
 #include <string.h>
 
 #include <cutils/atomic.h>
-#include <cutils/properties.h> // for property_get
+#include <cutils/properties.h>  // for property_get
 
 #include <utils/misc.h>
 
@@ -36,42 +36,45 @@ extern "C" {
 namespace android {
 
 // Application Utils
-int RjcoreService::isRunningPackage(String16 processname) {
-	ALOGD("isRunningPackage");
-	char res[1024];
-	char cmd[512];
-	char pid[10];
-	char* ptr;
-	char* pid_ptr;
-	int count = 0;
-	memset(res,0,sizeof(res));
-	memset(cmd,0,sizeof(cmd));
-	memset(pid,0,sizeof(pid));
-	sprintf(cmd,"ps | grep %s",String8(processname).string());
-	executeCmd(cmd,res);
-	if(res[0] != '\0') {
-		ptr = res;
-		pid_ptr = pid;
-		
-		while(1) {
-			if(*ptr == ' ')
-				break;
-			ptr++;
-		}
-		
-		while(1) {
-			if(*ptr > 0x30 && *ptr < 0x39)
-				break;
-			ptr++;
-		}
-		
-		while(*ptr != ' ')
-			*pid_ptr++ = *ptr++;
-		return atoi(pid);
-	}
-	
-	return -1;
+bool RjcoreService::isProcessRunning(String16 processname) {
+    CHECK_FUNCTION_IN();
+    char res[SIZE_1K] = { 0 };
+    char cmd[SIZE_1K_HALF] = { 0 };
+
+    snprintf(cmd, sizeof(cmd), "pidof %s", String8(processname).string());
+    executeCmd(cmd, res, sizeof(res));
+    if (res[0] != '\0') {
+        return true;
+    }
+    return false;
 }
 
+String16 RjcoreService::getProcessId(String16 processname) {
+    CHECK_FUNCTION_IN();
+    char res[SIZE_1K_HALF] = { 0 };
+    char cmd[SIZE_1K_HALF] = { 0 };
 
-} // namespace android
+    snprintf(cmd, sizeof(cmd), "pidof %s", String8(processname).string());
+    executeCmd(cmd, res, sizeof(res));
+    CHECK_STR16_RES(res);
+    return String16(res);
+}
+
+void RjcoreService::killByProcessName(String16 processname) {
+    CHECK_FUNCTION_IN();
+    char cmd[SIZE_1K_HALF] = { 0 };
+
+    String16 processPid = getProcessId(processname);
+    if (processPid == String16("")) {
+        ALOGE("the process not exist please check the processname! ");
+        return;
+    }
+
+    snprintf(cmd, sizeof(cmd), "kill -9 %s", String8(processPid).string());
+    if (mySystem(cmd) < 0) {
+        ALOGE("killByProcessName execute failed");
+        return;
+    }
+}
+
+}  // namespace android

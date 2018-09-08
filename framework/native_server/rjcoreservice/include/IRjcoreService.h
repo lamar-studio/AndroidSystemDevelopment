@@ -17,51 +17,50 @@ class IRjcoreService: public IInterface
 public:
     DECLARE_META_INTERFACE(RjcoreService);
 
-	// Product Utils
-	virtual String16 getCpuInfo() = 0;
-	virtual String16 getAndroidVersion() = 0;
-	virtual String16 getSystemVersion() = 0;
-	virtual String16 getClientVersion() = 0;
-	virtual String16 getSerialNumber() = 0;
-	virtual String16 getCustProductModel() = 0;
-	virtual String16 getHardwareVesion() = 0;
-	virtual String16 getProductID() = 0;
-	virtual String16 getProductName() = 0;
-	virtual String16 getBaseboardInfo() = 0;
-	virtual String16 getMemoryInfo() = 0;
-	virtual String16 getStorageInfo() = 0;
-	virtual void setPowerState(int powerState) = 0;
-	virtual int getPowerState() = 0;
-	virtual void collectLogFiles (String16 zipFilename) = 0;
-	virtual void copyData(String16 srcPath, String16 dstPath) = 0;
-	virtual void chmod(String16 path) = 0;
-	virtual void shutDown() = 0;
-	//virtual bool setDeviceResolution(String16 resolution) = 0;
-	virtual bool setDeviceResolution(int xres, int yres, int refresh, int flag) = 0;
-	virtual void controlLed(int color, int state) = 0;
-	virtual void setBrightness(int brightness) = 0;
-	virtual int getBrightness() = 0;
-	
-	// Network Utils
-	virtual String16 getMacAddress() = 0;
-	virtual String16 getIPAddress() = 0;
-	virtual String16 getGetwayAddress() = 0;
-	virtual String16 getNetmask() = 0;
-	virtual String16 getDns1Address() = 0;
-	virtual String16 getDns2Address() = 0;
-	virtual bool getNetcardState() = 0;
-	virtual String16 getNetcardCurSpeed() = 0;
-	virtual String16 getNetcardMaxSpeed() = 0;
-	virtual void startAvahi() = 0;
-	virtual void stopAvahi() = 0;
-	virtual String16 checkIpConfict() = 0;
-	virtual String16 ping(String16 ip, int count) = 0;
+    // Product Utils
+    virtual String16 getCpuInfo() = 0;
+    virtual String16 getAndroidVersion() = 0;
+    virtual String16 getSystemVersion() = 0;
+    virtual String16 getSerialNumber() = 0;
+    virtual String16 getProductType() = 0;
+    virtual String16 getHardwareVesion() = 0;
+    virtual String16 getProductId() = 0;
+    virtual String16 getProductName() = 0;
+    virtual String16 getBaseboardInfo() = 0;
+    virtual String16 getMemoryInfo() = 0;
+    virtual String16 getStorageInfo() = 0;
+    virtual void setPowerState(int powerState) = 0;
+    virtual int getPowerState() = 0;
+    virtual bool collectLogFiles_block (String16 zipFilename) = 0;  // time-consuming interface And synchronized
+    virtual bool chmodFile(String16 path, String16 mode) = 0;
+    virtual bool chmodDir(String16 path, String16 mode) = 0;
+    virtual bool rmFile(String16 path) = 0;
+    virtual void reboot() = 0;
+    virtual void shutdown() = 0;
+    virtual int getLedStatus(int color) = 0;
+    virtual void setLedStatus(int color, int state) = 0;
+    virtual bool setDeviceResolution(int xres, int yres, int refresh, int flag) = 0;
+    virtual String16 getCurrentResolution_block() = 0;  // time-consuming interface
+    virtual String16 getSupportResolution() = 0;
+    virtual String16 getPropertyValue(String16 key) = 0;
 
-	// Control Utils
-	virtual bool getOtaResult() = 0;
+    // Network Utils
+    virtual bool getNetcardState() = 0;
+    virtual String16 getNetcardCurSpeed() = 0;
+    virtual String16 getNetcardMaxSpeed() = 0;
+    virtual void startAvahi() = 0;
+    virtual void stopAvahi() = 0;
+    virtual String16 checkIpConflict_block(String16 ip) = 0;    //time-consuming interface
+    virtual String16 ping_block(String16 ip, int count, int timeout, int deadline) = 0;  //time-consuming interface
+    virtual String16 checkBandwidth_block(String16 serverIp, String16 user, String16 code) = 0;    //time-consuming interface And synchronized
 
-	// Application Utils
-	virtual int isRunningPackage(String16 processname) = 0;
+    // Control Utils
+    virtual bool getOtaResult() = 0;
+
+    // Application Utils
+    virtual bool isProcessRunning(String16 processname) = 0;
+    virtual String16 getProcessId(String16 processname) = 0;
+    virtual void killByProcessName(String16 processname) = 0;
 };
 
 // ----------------------------------------------------------------------------

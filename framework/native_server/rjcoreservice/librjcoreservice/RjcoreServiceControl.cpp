@@ -34,20 +34,20 @@ namespace android {
 
 // Control Utils
 bool RjcoreService::getOtaResult() {
-	ALOGD("getOtaResult");
-    const char *cmd    = "cat /sdcard/com.ruijie.rccstu/config.ini | grep updateFlag";
-    char result[1024]  = {0};
-    char ota_res[1024] = {0};
+    CHECK_FUNCTION_IN();
+    const char *cmd = "cat /sdcard/com.ruijie.rccstu/config.ini | grep updateFlag";
+    char result[SIZE_1K] = {0};
+    char ota_res[SIZE_1K] = {0};
 
-    executeCmd(cmd, result);
+    executeCmd(cmd, result, sizeof(result));
     if (result[0] == '\0') {
-        ALOGD("this machine nonexecution ota update.");
+        ALOGW("this machine nonexecution ota update.");
     } else {
         sscanf(result, "updateFlag=%s", ota_res);
         return (strncmp(ota_res, "UPDATE_SUCCESS", sizeof("UPDATE_SUCCESS")) == 0) ? true : false;
     }
 
-	return false;
+    return false;
 }
 
 

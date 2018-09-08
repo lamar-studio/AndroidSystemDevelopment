@@ -7,9 +7,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <arpa/inet.h>
 #include <dirent.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <time.h>
 
 #include <string.h>
 
@@ -30,112 +32,74 @@
 
 #include "RjcoreService.h"
 
+#define CMD_NETCARDCURSPEED    "ethtool eth0 | grep \"Speed:\" | awk '{print $2}'"
+#define CMD_STOPAVAHI          "sh /system/bin/shutdown_avahi.sh"
 
 namespace android {
 
+static Mutex sNetLock;
+
+static int check_ipaddr(const char *str)
+{
+    struct sockaddr_in6 addr6;
+    struct sockaddr_in addr4;
+
+    if (str == NULL || *str == '\0') {
+        ALOGW("the str is invalid.");
+        return 1;
+    }
+
+    if (inet_pton(AF_INET, str, &addr4.sin_addr) == 1) {
+        return 0;
+    } else if (inet_pton(AF_INET6, str, &addr6.sin6_addr) == 1) {
+        return 0;
+    }
+
+    return 1;
+}
+
 // Network Utils
-String16 RjcoreService::getMacAddress() {
-	ALOGD("getMacAddress");
-    const char *cmd = "cat /sys/class/net/eth0/address";
-    char result[1024] = {0};
-
-    executeCmd(cmd, result);
-	ALOGD("getMacAddress res:%s", result);
-
-	return String16(result);
-}
-
-String16 RjcoreService::getIPAddress() {
-	ALOGD("getIPAddress");
-
-	return String16("");
-}
-
-String16 RjcoreService::getGetwayAddress() {
-	ALOGD("getGetwayAddress");
-    const char *cmd = "ip route | grep ^d | grep 'eth0 '$ | awk '{print $3}'";
-    char result[1024] = {0};
-
-    executeCmd(cmd, result);
-	ALOGD("getGetwayAddress res:%s", result);
-
-	return String16(result);
-}
-
-String16 RjcoreService::getNetmask() {
-	ALOGD("getNetmask");
-    const char *cmd = "ifconfig eth0";
-    char result[1024] = {0};
-    char buf_1[1024]  = {0};
-    char buf_2[1024]  = {0};
-
-    executeCmd(cmd, result);
-    sscanf (result, "eth0:%[^mask]mask %[^flags] ", buf_1, buf_2);
-    ALOGD("getNetmask buf_2:%s", buf_2);
-
-	return String16(buf_2);
-}
-
-String16 RjcoreService::getDns1Address() {
-	ALOGD("getDns1Address");
-    char buf[PROPERTY_VALUE_MAX] = {0};
-
-    if (property_get("net.dns2", buf, NULL) > 0) {
-        return String16(buf);
-    } else {
-        ALOGW("Not found the property [net.dns1]");
-    }
-
-	return String16("");
-}
-
-String16 RjcoreService::getDns2Address() {
-	ALOGD("getDns2Address");
-    char buf[PROPERTY_VALUE_MAX] = {0};
-
-    if (property_get("net.dns1", buf, NULL) > 0) {
-        return String16(buf);
-    } else {
-        ALOGW("Not found the property [net.dns2]");
-    }
-
-	return String16("");
-}
-
 bool RjcoreService::getNetcardState() {
-	ALOGD("getNetcardState");
-    const char *cmd = "ethtool eth0 | grep \"Link detected\" | awk '{print $3}'";
-    char result[1024] = {0};
+    CHECK_FUNCTION_IN();
+    const char *cmd = "ethtool eth0 | grep \"Link detected:\" | awk '{print $3}'";
+    char result[SIZE_1K] = {0};
 
-    executeCmd(cmd, result);
-    if (strncmp(result, "yes", sizeof("yes"))) {
+    executeCmd(cmd, result, sizeof(result));
+    if (strncmp(result, "yes", strlen("yes")) == 0) {
         return true;
-    } else if (strncmp(result, "no", sizeof("no"))) {
+    } else if (strncmp(result, "no", strlen("no")) == 0) {
         return false;
     } else {
-        ALOGD("Not found the Link detected");
+        ALOGW("Not found the Link detected");
     }
 
-	return false;
+    return false;
 }
 
 String16 RjcoreService::getNetcardCurSpeed() {
+    CHECK_FUNCTION_IN();
+    int len = 0;
+    char result[SIZE_1K] = {0};
 
-    const char *cmd   = "ethtool eth0 | grep Speed | awk '{print $2}'";
-    char result[1024] = {0};
+    executeCmd(CMD_NETCARDCURSPEED, result, sizeof(result));
+    CHECK_STR16_RES(result);
 
-    executeCmd(cmd, result);
-	ALOGD("getNetcardCurSpeed :%s", result);
+    len = strlen(result);
+    if (result[len - 1] == '\n') {
+        result[len - 1] = '\0';
+    }
 
-	return String16(result);
+    ALOGV("getNetcardCurSpeed :%s", result);
+
+    return String16(result);
 }
 
 String16 RjcoreService::getNetcardMaxSpeed() {
-	ALOGD("getNetcardMaxSpeed");
-    const char *cmd  = "ethtool eth0 | grep -A2 \"Supported link modes\"";
-    char result[1024] = {0};
+    CHECK_FUNCTION_IN();
+    const char *cmd = "ethtool eth0 | grep -A2 \"Supported link modes:\"";
+    char result[SIZE_1K] = {0};
 
-    executeCmd(cmd, result);
+    executeCmd(cmd, result, sizeof(result));
     if (strstr(result, "1000baseT/Full") != NULL) {
         return String16("1000");
     } else if (strstr(result, "100baseT/Full") != NULL) {
@@ -143,87 +107,180 @@ String16 RjcoreService::getNetcardMaxSpeed() {
     } else if (strstr(result, "10baseT/Full") != NULL) {
         return String16("10");
     } else {
-        ALOGD("Not found the Speed keyword");
+        ALOGW("Not found the Speed keyword");
     }
 
-	return String16("");
+    return String16("");
 }
 
 void RjcoreService::startAvahi() {
-	ALOGD("startAvahi");
-    const char *cmd_1    = "sh /data/data/com.ruijie.rccstu/files/avahi/config_avahi.sh";
-    const char *cmd_2    = "/system/bin/avahi-autoipd --kill eth0";
-    const char *cmd_3    = "/system/bin/avahi-autoipd --no-drop-root "
-                           "--script=/data/data/com.ruijie.rccstu/files/avahi/avahi-autoipd.action eth0 &";
-    char result[1024]    = {0};
+    CHECK_FUNCTION_IN();
+    const char *cmd_config = "sh /system/bin/config_avahi.sh";
+    const char *cmd_kill = "/system/bin/avahi-autoipd --kill eth0";
+    const char *cmd_start = "/system/bin/avahi-autoipd --no-drop-root --script=/system/bin/avahi-autoipd_action.sh eth0 &";
 
-    if (access("/data/data/org.freedesktop.telepathy/files", 0) != 0) {
+    if (access("/data/data/org.freedesktop.telepathy/files", F_OK) != 0
+        && access("/system/bin/config_avahi.sh", F_OK) == 0) {
         ALOGW("not found the directory, create it.");
-        system(cmd_1);
+        if (mySystem(cmd_config) < 0) {
+            ALOGE("cmd_config execute error!");
+            return;
+        }
     }
 
-    if (access("/data/data/com.ruijie.rccstu/files/avahi/config_avahi.sh", 0) == 0
-        && access("/data/data/com.ruijie.rccstu/files/avahi/avahi-autoipd.action", 0) == 0) {
-        system(cmd_2);
-        system(cmd_3);
+    if (access("/system/bin/avahi-autoipd_action.sh", F_OK) == 0) {
+        if (getNetcardState() == true && getProcessId(String16("avahi-autoipd")) != String16("")) {
+            if (mySystem(cmd_kill) < 0) {
+                ALOGE("cmd_kill execute error!");
+                return;
+            }
+        }
+
+        if (mySystem(cmd_start) < 0) {
+            ALOGE("cmd_start execute error!");
+            return;
+        }
+
     } else {
         ALOGE("not found the script");
     }
 
-    return ;
+    return;
 }
 
 void RjcoreService::stopAvahi() {
-	ALOGD("stopAvahi");
-    const char *cmd   = "sh /system/bin/shutdown_avahi.sh";
-    char result[1024] = {0};
+    CHECK_FUNCTION_IN();
 
-    if (access("/system/bin/shutdown_avahi.sh", 0) == 0) {
-        system(cmd);
+    if (access("/system/bin/shutdown_avahi.sh", F_OK) == 0) {
+        if (mySystem(CMD_STOPAVAHI) < 0) {
+            ALOGE("CMD_STOPAVAHI execute error!");
+            return;
+        }
     } else {
         ALOGE("not found the script");
     }
 
-    return ;
+    return;
 }
 
+//time-consuming interface
+String16 RjcoreService::checkIpConflict_block(String16 ip) {
+    CHECK_FUNCTION_IN();
+    int len = 0;
+    char cmd[SIZE_1K] = {0};
+    char result[SIZE_1K] = {0};
 
-/**
- * 本地ip冲突检测
- * 冲突时 - 返回冲突冲突机器的mac地址
- * 无冲突 - 返回全0的mac地址
- *
- * 注意事项:该接口耗时较长
- */
-String16 RjcoreService::checkIpConfict() {
-	ALOGD("checkIpConfict");
-    const char *cmd_1  = "busybox ifconfig eth0 | grep \"inet addr\" | awk '{print $2}' | cut -c 6-";
-    char cmd_2[1024]   = {0};
-    char result[1024]  = {0};
+    if (check_ipaddr(String8(ip).string()) != 0) {
+        ALOGW("the ip:%s is invalid.", String8(ip).string());
+        return String16("");
+    }
 
-    executeCmd(cmd_1, result);        //get the local ip
-    result[strlen(result) - 1] = 0;   //remove the special char
-    snprintf(cmd_2, sizeof(cmd_2), "checkip %s -s | grep srcMac | awk '{print $2}'", result);
+    if (getNetcardState() == false) {
+        ALOGW("Net disable");
+        return String16("");
+    }
 
-    memset(result, 0, sizeof(result));
-    executeCmd(cmd_2, result);        //get the conflict macAddr
-	ALOGD("checkIpConfict res:%s", result);
+    snprintf(cmd, sizeof(cmd), "checkip %s -s | grep srcMac | awk '{print $2}'", String8(ip).string());
+    executeCmd(cmd, result, sizeof(result));         //get the conflict macAddr
+    CHECK_STR16_RES(result);
 
-	return String16(result);
+    len = strlen(result);
+    if (result[len - 1] == '\n') {
+        result[len - 1] = '\0';
+    }
+
+    ALOGV("checkIpConflict_block ip:%s res:%s", String8(ip).string(), result);
+
+    return String16(result);
 }
 
-String16 RjcoreService::ping(String16 ip, int count) {
-	ALOGD("ping");
-    char cmd[1024]    = {0};
-    char result[1024] = {0};
+//time-consuming interface
+String16 RjcoreService::ping_block(String16 ip, int count, int timeout, int deadline) {
+    CHECK_FUNCTION_IN();
+    int len = 0;
+    char cmd[SIZE_1K] = {0};
+    char result[SIZE_1K] = {0};
 
-    snprintf(cmd, sizeof(cmd), "ping -c %d %s | grep transmitted", count, String8(ip).string());
+    if (check_ipaddr(String8(ip).string()) != 0) {
+        ALOGW("the ip:%s is invalid.", String8(ip).string());
+        return String16("");
+    }
 
-    executeCmd(cmd, result);
-	ALOGD("ping the result:%s", result);
+    if (count <= 0 || timeout < 0 || deadline < 0) {
+        ALOGW("ping_block: the parameter is invalid.");
+        return String16("");
+    }
 
-	return String16(result);
+    snprintf(cmd, sizeof(cmd), "ping -c %d -W %d -w %d %s | grep transmitted",
+             count, timeout, deadline, String8(ip).string());
+
+    executeCmd(cmd, result, sizeof(result));
+    CHECK_STR16_RES(result);
+
+    len = strlen(result);
+    if (result[len - 1] == '\n') {
+        result[len - 1] = '\0';
+    }
+
+    ALOGV("ping_block cnt:%d timeout:%d deadline:%d the result:%s", count, timeout, deadline, result);
+
+    return String16(result);
 }
 
+//time-consuming interface And synchronized
+String16 RjcoreService::checkBandwidth_block(String16 serverIp, String16 user, String16 code) {
+    CHECK_FUNCTION_IN();
+    const char *bandtmpfile = "/data/data/com.ruijie.rccstu/bandtmpfile";
+    char cmd_down[SIZE_1K] = {0};
+    char cmd_size[SIZE_1K] = {0};
+    char cmd_rm[SIZE_1K] = {0};
+    char result[SIZE_1K] = {0};
+    char speed_str[SIZE_1K_HALF] = {0};
+    char buf_size[SIZE_1K_HALF] = {0};
+    time_t t_start, t_end;
+
+    Mutex::Autolock _l(sNetLock);
+    if (check_ipaddr(String8(serverIp).string()) != 0) {
+        ALOGW("the ip:%s is invalid.", String8(serverIp).string());
+        return String16("");
+    }
+
+    //download the file and keep time
+    if (user.size() == 0 && code.size() == 0) {
+        snprintf(cmd_down, sizeof(cmd_down), "wget -O %s ftp://%s/pub/speed_file &>/dev/null -T 15",
+                 bandtmpfile, String8(serverIp).string());
+    } else {
+        snprintf(cmd_down, sizeof(cmd_down), "wget -O %s ftp://%s:%s@%s/pub/speed_file &>/dev/null -T 15",
+                 bandtmpfile, String8(user).string(), String8(code).string(), String8(serverIp).string());
+    }
+
+    t_start = time(NULL);
+    executeCmd(cmd_down, result, sizeof(result));      //block
+    if (access(bandtmpfile, F_OK) == 0) {
+        t_end = time(NULL);
+
+        memset(result, 0, sizeof(result));
+        snprintf(cmd_size, sizeof(cmd_size), "busybox du -h %s | awk '{print $1}'", bandtmpfile);
+        executeCmd(cmd_size, result, sizeof(result));
+        CHECK_STR16_RES(result);
+        sscanf(result, "%[^M]", buf_size);
+
+        //calculate the Bandwidth
+        snprintf(speed_str, sizeof(speed_str), "%.2fMb/s", (atof(buf_size) / difftime(t_end, t_start)));
+        ALOGV("checkBandwidth_block the speed:%s", speed_str);
+
+        //del the temp file
+        snprintf(cmd_rm, sizeof(cmd_rm), "rm %s", bandtmpfile);
+        if (mySystem(cmd_rm) < 0) {
+            ALOGE("del the bandtmpfile error!");
+        }
+
+        return String16(speed_str);
+    } else {
+        ALOGE("connect %s fail", String8(serverIp).string());
+    }
+
+    return String16("");
+}
 
 } // namespace android

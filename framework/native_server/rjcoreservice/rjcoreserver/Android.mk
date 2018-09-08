@@ -20,8 +20,7 @@ LOCAL_C_INCLUDES := \
     $(TOP)/frameworks/native/services/rjcoreservice/librjcoreservice
 
 LOCAL_MODULE:= rjcoreserver
-
-LOCAL_32_BIT_ONLY := true
+LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR_EXECUTABLES)
 
 include $(BUILD_EXECUTABLE)
 
